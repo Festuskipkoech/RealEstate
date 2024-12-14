@@ -45,6 +45,8 @@ export default function Upload({ navigation }) {
             name: image.uri.split('/').pop(),
         });
         formData.append('description', description);
+        console.log('Form Data:', formData);
+
 
         try {
             const response = await axios.post('http://192.168.100.219:3001/upload', formData, {

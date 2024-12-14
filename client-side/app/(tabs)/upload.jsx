@@ -1,105 +1,180 @@
 import React, { useState } from 'react';
-import { View, TextInput, Button, StyleSheet, Image, Alert } from 'react-native';
+import {
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  Image,
+  StyleSheet,
+  ActivityIndicator,
+  ScrollView,
+} from 'react-native';
 import * as ImagePicker from 'expo-image-picker';
-import axios from 'axios';
 
-export default function Upload({ navigation }) {
-    const [image, setImage] = useState(null);
-    const [description, setDescription] = useState('');
+export default function Upload() {
+  const [image, setImage] = useState(null);
+  const [description, setDescription] = useState('');
+  const [uploading, setUploading] = useState(false);
 
-    // Function to pick an image from the device
-    const pickImage = async () => {
-        const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (status !== 'granted') {
-            Alert.alert('Permission required', 'Sorry, we need camera roll permissions to make this work!');
-            return;
-        }
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [4, 3],
+        quality: 1,
+      });
 
-        // Launch image picker
-        let result = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ['images'],
-            allowsEditing: true,
-            aspect: [4, 3],
-            quality: 1,
-        });
+      if (!result.canceled) {
+        setImage(result.assets[0]);
+      }
+    } catch (error) {
+      alert('Error picking image: ' + error.message);
+    }
+  };
 
-        if (!result.canceled) {
-            setImage(result.assets[0]);
-        } else {
-            Alert.alert('No image selected', 'Please select an image first!');
-        }
-    };
+  const uploadImage = async () => {
+    if (!image) {
+      alert('Please select an image first');
+      return;
+    }
 
-    // Function to upload the selected image to the server
-    const uploadImage = async () => {
-        if (!image) {
-            Alert.alert('No image selected', 'Please select an image first!');
-            return;
-        }
+    setUploading(true);
 
-        // Prepare form data
-        const formData = new FormData();
-        formData.append('file', {
-            uri: image.uri,
-            type: image.type || 'image/jpeg',
-            name: image.uri.split('/').pop(),
-        });
-        formData.append('description', description);
-        console.log('Form Data:', formData);
+    try {
+      const formData = new FormData();
+      formData.append('file', {
+        uri: image.uri,
+        type: 'image/jpeg',
+        name: 'upload.jpg',
+      });
+      formData.append('description', description);
 
+      const response = await fetch('http://192.168.100.219:3001/upload', {
+        method: 'POST',
+        body: formData,
+        headers: {
+          'Content-Type': 'multipart/form-data',
+        },
+      });
 
-        try {
-            const response = await axios.post('http://192.168.100.219:3001/upload', formData, {
-                headers: {
-                    'Content-Type': 'multipart/form-data',
-                },
-            });
-            Alert.alert('Upload successful', 'Image uploaded successfully!');
-            console.log('Upload successful:', response.data);
+      const result = await response.json();
 
-            // Clear the form after successful upload
-            setImage(null);
-            setDescription('');
-            navigation.goBack();
-        } catch (error) {
-            console.error('Error uploading image:', error.response ? error.response.data : error.message);
-            Alert.alert('Upload failed', 'There was an error uploading the image.');
-        }
-    };
+      if (response.ok) {
+        alert('Upload successful!');
+        // Clear inputs after upload
+        setImage(null);
+        setDescription('');
+      } else {
+        throw new Error(result.error || 'Upload failed');
+      }
+    } catch (error) {
+      console.error('Error uploading:', error);
+      alert('Upload failed: ' + error.message);
+    } finally {
+      setUploading(false);
+    }
+  };
 
-    return (
-        <View style={styles.container}>
-            <Button title="Pick an image" onPress={pickImage} />
-            {image && <Image source={{ uri: image.uri }} style={styles.image} />}
-            <TextInput
-                placeholder="Image description"
-                value={description}
-                onChangeText={setDescription}
-                style={styles.input}
-            />
-            <Button title="Upload" onPress={uploadImage} />
+  return (
+    <ScrollView contentContainerStyle={styles.container}>
+      <Text style={styles.header}>Upload an Image</Text>
+
+      <TouchableOpacity style={styles.pickButton} onPress={pickImage}>
+        <Text style={styles.buttonText}>Pick an Image</Text>
+      </TouchableOpacity>
+
+      {image && (
+        <View style={styles.imageContainer}>
+          <Image source={{ uri: image.uri }} style={styles.preview} />
         </View>
-    );
+      )}
+
+      <TextInput
+        style={styles.input}
+        placeholder="Write a description..."
+        value={description}
+        onChangeText={setDescription}
+        multiline
+      />
+
+      <TouchableOpacity
+        style={[styles.uploadButton, uploading && styles.uploadingButton]}
+        onPress={uploadImage}
+        disabled={uploading}
+      >
+        {uploading ? (
+          <ActivityIndicator size="small" color="#fff" />
+        ) : (
+          <Text style={styles.uploadButtonText}>Upload</Text>
+        )}
+      </TouchableOpacity>
+    </ScrollView>
+  );
 }
 
+// styles.js
 const styles = StyleSheet.create({
-    container: {
-        flex: 1,
-        alignItems: 'center',
-        justifyContent: 'center',
-        padding: 20,
-    },
-    image: {
-        width: 200,
-        height: 200,
-        margin: 10,
-    },
-    input: {
-        height: 40,
-        borderColor: 'gray',
-        borderWidth: 1,
-        marginBottom: 20,
-        width: '100%',
-        paddingHorizontal: 10,
-    },
+  container: {
+    flexGrow: 1,
+    padding: 20,
+    backgroundColor: '#f9f9f9',
+  },
+  header: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    marginBottom: 20,
+    textAlign: 'center',
+    color: '#333',
+  },
+  pickButton: {
+    backgroundColor: '#4CAF50',
+    padding: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  buttonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
+  imageContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+    backgroundColor: '#f5f5f5',
+    borderRadius: 10,
+    overflow: 'hidden',
+  },
+  preview: {
+    width: '100%',
+    height: 300,
+    borderRadius: 10,
+    resizeMode: 'cover',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 5,
+    padding: 15,
+    backgroundColor: '#fff',
+    fontSize: 16,
+    minHeight: 100,
+    textAlignVertical: 'top',
+    marginBottom: 20,
+  },
+  uploadButton: {
+    backgroundColor: '#2196F3',
+    padding: 15,
+    borderRadius: 5,
+    alignItems: 'center',
+  },
+  uploadingButton: {
+    backgroundColor: '#1976D2',
+  },
+  uploadButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: 'bold',
+  },
 });
